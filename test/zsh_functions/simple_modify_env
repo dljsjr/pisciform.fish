@@ -1,0 +1,8 @@
+#!/usr/bin/env zsh
+
+alias gi="git init"
+export TEST_VAR="${1}=${2}"
+foo() {
+  printf "bar\n"
+}
+pushd "$HOME"
