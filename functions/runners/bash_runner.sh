@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 isbuiltin=false
 
 cd "$1" || exit
@@ -24,22 +24,13 @@ while test $# -gt 0; do
   esac
 done
 
-if whence -w "$funcarg" | grep -q ': builtin'; then
+if type -t "$funcarg" | grep -q 'builtin'; then
   isbuiltin=true
   funcname="$funcarg"
   :
-elif whence -w "$funcarg" | grep -q ': function'; then
+elif type -t "$funcarg" | grep -q 'function'; then
   funcname="$funcarg"
   :
-elif [[ -f "$funcarg" ]]; then
-  funcname="$(basename "$funcarg")"
-  funcfile="$(cd "$(realpath "$(dirname "$funcarg")")" && /bin/pwd -P)/${funcname}"
-  :
-fi
-
-if [[ -n "$funcfile" ]]; then
-  fpath+=("$(dirname "$funcfile")")
-  autoload -U "$funcfile"
 fi
 
 mkdir -p "${outdir}/before/"
@@ -68,13 +59,13 @@ funcstatus=$?
 while IFS= read -r envvar; do
   decl="$(declare -p "$envvar" 2>/dev/null)"
   if [ -n "$decl" ]; then
-    echo "$decl" >>"${outdir}/before/${envvar}"
+    echo "$decl" >>"${outdir}/after/${envvar}"
   fi
 done < <(awk 'BEGIN{for(v in ENVIRON) print v}' | sort -h)
 
 alias | sort -h >"${outdir}/alias.after"
 
-dirs -pl | nl | sort -nr | cut -f 2- >"${outdir}/dirstack"
+dirs -p -l | nl | sort -nr | cut -f 2- >"${outdir}/dirstack"
 
 touch "$outdir/env.ops"
 while IFS= read -r line; do

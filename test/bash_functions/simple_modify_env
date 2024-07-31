@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+modify_env() {
+  alias gi="git init"
+  export TEST_VAR="${1}=${2}"
+  pushd "$HOME" || exit
+}

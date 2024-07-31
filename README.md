@@ -17,9 +17,9 @@ Fish is a terrific shell. I first explored it over 10 years ago. One of the main
 Over the years, it's become a lot easier to share most stuff:
 
 1. Out of the box, shell *scripts* with a proper shebang were always portable and worked fine
-2. Awesome tools like [bass](https://github.com/edc/bass) and [replay](https://github.com/jorgebucaran/replay.fish) already exist and do a pretty good job handling the `source` story for scripts targeting other shells, though they have some edge cases
+2. Awesome tools like [bass](https://github.com/edc/bass) and [replay](https://github.com/jorgebucaran/replay.fish) already exist and do a pretty good job handling the specific use case of `source`'ing bash scripts. But they have edge cases, are limited in what they do, and they only target bash.
 
-That left one hole, though: Shell functions. Which really sucked for me, because I write a *lot* of shell functions.
+That leaves one last pretty large hole as well, though: Shell functions. Which really sucked for me, because I write a *lot* of shell functions.
 
 ***Why shell functions?***
 
@@ -47,6 +47,9 @@ OPTIONS:
 EXAMPLES
   # creates a fish function called `do_something` that invokes the autoloadable ZSH function in the given file
   pisciform --interactive --zsh --file "$HOME/.zfunc/do_something"
+
+  # creates a fish function called `foo` around a bash function called `foo`, where foo is a function defined in the file ~/.bashfuncs, so the file must be sourced first.
+  pisciform --interactive --bash --init-file ~/.bashfuncs foo
 ```
 
 ## What Does Pisciform Do?
@@ -56,21 +59,22 @@ In a nutshell, it dynamically adds a function to the current `fish` session that
 Then, when you subsequently call the `fish` version of the function, the following happens:
 
 1. A script called a "runner" is executed as an argument to the appropriate shell (`bash`/`zsh`/`sh`)
-2. The runner script will create a tempdir to capture information it needs
-3. The runner will capture the existing environment variables and alias definitions for the subshell
-4. The runner will reset the directory stack so that only the changes from the function are captured.
-5. The runner will call the wrapped function or built-in
-6. The runner will exit early with the command's status if the status is non-zero
-7. The runner will capture the environment variables, aliases, and directory  state from after the command is executed
-8. The runner will compute the following deltas and report them to the fish environment:
+2. The runner script will create a tempdir to capture the information it needs
+3. The runner will source any init files that were passed to the wrapping call
+4. The runner will capture the existing environment variables and alias definitions for the subshell
+5. The runner will reset the directory stack so that only the changes from the function are captured.
+6. The runner will call the wrapped function or built-in
+7. The runner will exit early with the command's status if the status is non-zero
+8. The runner will capture the environment variables, aliases, and directory stack state from after the command is executed
+9. The runner will compute the following deltas and report them to the fish environment:
    1. Environment variables that no longer exist after the command has run; these variables will be erased with `set -e` in the fish environment
    2. Environment variable "upserts"; that is, variables that are new as well as variables that are changed.
       1. Variables that are part of an `export` declaration will be exported in the calling `fish` environment with `set -gx`
       2. Variables that are *not* exported will be set in the calling `fish` environment with `set -g`
    3. Aliases that exist after the script was run but did not exist before it was run will be created with `alias`
-9. The fish environment will `pushd` the reversed directory stack from the function execution; in other words, it will start from the bottom so that it ends up with the same final stack order as the subshell had when the function call completed.
-   1. If the element on the bottom of the stack is the same as the directory the function was originally called from, it'll get skipped.
-10. If the final directory from the directory stack following is not the same as the final value of the `PWD` environment variable, we'll `cd` in to the value that's in the ending version of `PWD`
+10. The fish environment will `pushd` the reversed directory stack from the function execution; in other words, it will start from the bottom so that it ends up with the same final stack order as the subshell had when the function call completed.
+    1. If the element on the bottom of the stack is the same as the directory the function was originally called from, it'll get skipped.
+11. If the final directory from the directory stack following is not the same as the final value of the `PWD` environment variable, we'll `cd` in to the value that's in the ending version of `PWD`
 
 These values are all captured in a temporary directory created using `mktemp -d`. The wrapper function will clean up the `tmpdir` after execution.
 
@@ -83,6 +87,9 @@ Pisciform is heavily inspired by `bass` and `replay`, with the same basic philos
 3. `pisciform` will also mirror changes to the directory stack, not just the PWD.
 4. `pisciform` works with interactive commands
 5. `pisciform` can be told that a function should be run in an interactive and/or login subshell, allowing it to utilize the profile and shellrc files in place for the subshell, which can be helpful when initially migrating to `fish`.
+6. Both `bass` and `replay` only support `bash` as the target for running non-fish shell commands. `pisciform` supports POSIX* and ZSH dialects as well.
+
+\*: Not yet, but soon.
 
 ## Progress
 
@@ -91,5 +98,5 @@ Right now, ZSH is the primary target; it's where I was coming from, and a lot of
 ### Supported "Foreign" Shells
 
 - [x] zsh
-- [ ] bash
+- [x] bash
 - [ ] POSIX sh
