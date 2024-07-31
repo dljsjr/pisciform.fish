@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+modify_env() {
+  alias gi="git init"
+  export TEST_VAR="${1}=${2}"
+  echo "hello world"
+  cd "$HOME/git" || return
+}

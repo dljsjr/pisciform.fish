@@ -15,17 +15,60 @@ function pisciform --description "Create a fish function/alias for invoking a Ba
     function _pisciform_make_posix_wrapper -V scriptdir -V ENV_VAR_IGNORE_REGEX
         set -f verbose $argv[1]
         set -f is_interactive $argv[2]
-        set -f is_login $argv[3]
-        set -f runner_mode $argv[4]
-        set -f funcname $argv[5]
-        set -f init_files $argv[6..]
+        set -f runner_mode $argv[3]
+        set -f funcname $argv[4]
+        set -f init_files $argv[5..]
 
         if $verbose
-            echo "make POSIX shell wrapper for func $funcname"
+            echo "make bash wrapper for func $funcname"
         end
 
-        echo "not yet implemented"
-        return 1
+        # inspired by replay.fish: https://github.com/jorgebucaran/replay.fish/
+        function $funcname -V init_files -V is_interactive -V runner_mode -V verbose -V funcsource -V funcname -V scriptdir -V ENV_VAR_IGNORE_REGEX --description "Fish wrapper for Bash function $funcname"
+            if $verbose
+                echo "funcsource: $funcsource"
+                echo "funcname: $funcname"
+                echo "scriptdir: $scriptdir"
+            end
+            set -f shell_args
+            if $is_interactive
+                set -a -f shell_args -i
+            end
+            set -f currdir (builtin pwd -P)
+            set -f outdir (mktemp -d)
+            command sh $shell_args -- "$scriptdir/runners/posix_runner.sh" $currdir $outdir $funcname $init_files -- $argv || return
+            string replace --all -- \\n \n (
+              for line in (cat "$outdir/env.ops" | grep -vE "$ENV_VAR_IGNORE_REGEX")
+                  set -l operation (echo "$line" | cut -d ':' -f 1)
+                  set -l varname (echo "$line" | cut -d ':' -f 2-)
+                  switch $operation
+                      case delete
+                          echo set -e $varname
+                      case upsert
+                          set -l vardecl (cat "$outdir/after/$varname")
+                          set -l decltype (echo "$vardecl" | cut -d ' ' -f 2)
+                          set -l varval (string escape --no-quoted (string trim -c "\"" (string trim -c "'" (echo "$vardecl" | cut -d '=' -f 2-))))
+                          if string match -q -r -- '^-.*x.*$' "$decltype"
+                              echo set -g -x $varname $varval
+                          else
+                              echo set -g $varname $varval
+                          end
+                  end
+              end
+
+              for line in (cat "$outdir/alias.to_add")
+                  echo "alias $line"
+              end
+
+              if test -f "$outdir/after/PWD"
+                  set -l finaldir (builtin realpath (string trim -c "\"" (cat "$outdir/after/PWD" | cut -d '=' -f 2-)))
+                  if not test (builtin realpath $finaldir) = (builtin pwd -P)
+                      echo cd "$finaldir"
+                  end
+              end
+            ) | source
+            rm -rf "$outdir"
+        end
     end
 
     function _pisciform_make_bash_wrapper -V scriptdir -V ENV_VAR_IGNORE_REGEX
@@ -196,7 +239,7 @@ OPTIONS:
   -h, --help                print this usage, then return
   -v, --verbose             Sets a \"verbose\" flag for tracing the wrapped process, and generates a verbose version of the 'runner'
   --interactive             Set the interactive flag on the runner shell
-  --login                   Set the login flag on the runner shell.
+  --login                   Set the login flag on the runner shell (BASH and ZSH)
   --sh, --zsh, --bash       Mutually exclusive. Selects which runner to use. Defaults to `sh`
   -b, --builtin             Instructs the runner that the command being wrapped is a shell built-in instead of a function defined in a file
   -a, --autoload            Only availble when `--zsh` is set. The FUNCTION_NAME positional argument should be replaced with the path to
@@ -204,7 +247,10 @@ OPTIONS:
                             The name of the file becomes the function name, and the containing directory for the file will be appended
                             to the runner's `fpath`.
   --init-file               File to `source` before invoking the command. May be specified more than once to source multiple files.
-                            Useful for shells like bash or sh where a user function might be defined in an RC file.
+                            Useful for shells like bash or sh where a user function might be defined in an RC file. Note that these files
+                            will be sourced *before* the pre-execution environment is captured, so environment modifications performed by
+                            these files will *not* be propagated in to the containing shell; they'll only be made available to the function
+                            invocation.
 
 EXAMPLES
   # creates a fish function called `do_something` that invokes the autoloadable ZSH function in the given file
@@ -276,7 +322,7 @@ EXAMPLES
 
     switch "$runner_shell"
         case sh
-            _pisciform_make_posix_wrapper $verbose $is_interactive $is_login $runner_mode $argv $init_files
+            _pisciform_make_posix_wrapper $verbose $is_interactive $runner_mode $argv $init_files
         case zsh
             _pisciform_make_zsh_wrapper $verbose $is_interactive $is_login $runner_mode $argv $init_files
         case bash
