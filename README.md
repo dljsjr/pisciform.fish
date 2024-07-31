@@ -47,7 +47,10 @@ OPTIONS:
                             The name of the file becomes the function name, and the containing directory for the file will be appended
                             to the runner's `fpath`.
   --init-file               File to `source` before invoking the command. May be specified more than once to source multiple files.
-                            Useful for shells like bash or sh where a user function might be defined in an RC file.
+                            Useful for shells like bash or sh where a user function might be defined in an RC file. Note that these files
+                            will be sourced *before* the pre-execution environment is captured, so environment modifications performed by
+                            these files will *not* be propagated in to the containing shell; they'll only be made available to the function
+                            invocation.
 
 EXAMPLES
   # creates a fish function called `do_something` that invokes the autoloadable ZSH function in the given file
@@ -153,6 +156,7 @@ Right now, ZSH is the primary target; it's where I was coming from, and a lot of
 - [x] Execute function calls defined in a ZSH-compatible way
   - [x] Support ZSH autoload function files
 - [x] Execute function calls defined in a BASH-compatible way
+- [x] Execute function calls in POSIX `/bin/sh`
 - [x] Support `interactive` subshells
 - [x] Support `login` subshells
 - [x] Provide a list of files to be `source`'d before calling the function
@@ -163,7 +167,6 @@ Right now, ZSH is the primary target; it's where I was coming from, and a lot of
 - [x] Support replaying changes to the directory stack in supported shells
 
 ### Planned Features
-- [ ] Execute function calls in POSIX `/bin/sh`
 - [ ] Immediate execution of commands instead of generating function calls
   - [ ] Immediately invoke a function as a one-off, replaying changes but not creating a Fish function
   - [ ] Support a `source` mode that sources a file instead of trying to execute a command (different from existing init file support)
