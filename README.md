@@ -33,7 +33,7 @@ NAME:
   pisciform - Create a fish function/alias for invoking a Bash/ZSH/Posix shell function and capturing environment changes
 
 USAGE:
-  pisciform [-h|--help] [-v|--verbose] [--interactive] [--login] [{-f|--file}|{-b|--builtin}] [--sh|--zsh|--bash] FUNCTION_NAME
+  pisciform [-h|--help] [-v|--verbose] [--interactive] [--login] [{-f|--file}|{-b|--builtin}] [--sh|--zsh|--bash] [--source ...] FUNCTION_NAME
 
 OPTIONS:
   -h, --help                print this usage, then return
@@ -42,7 +42,12 @@ OPTIONS:
   --login                   Set the login flag on the runner shell.
   --sh, --zsh, --bash       Mutually exclusive. Selects which runner to use. Defaults to `sh`
   -b, --builtin             Instructs the runner that the command being wrapped is a shell built-in instead of a function defined in a file
-  -f, --file                Only availble when `--zsh` is set. Instructs the runner to pass the given file to `autoload -U`. Treats the file name as the function name, and adds its containing directory to the runner's `fpath`.
+  -a, --autoload            Only availble when `--zsh` is set. The FUNCTION_NAME positional argument should be replaced with the path to
+                            a file that contains an autoloadable function definition. The runner will pass the given file to `autoload -U`.
+                            The name of the file becomes the function name, and the containing directory for the file will be appended
+                            to the runner's `fpath`.
+  --init-file               File to `source` before invoking the command. May be specified more than once to source multiple files.
+                            Useful for shells like bash or sh where a user function might be defined in an RC file.
 
 EXAMPLES
   # creates a fish function called `do_something` that invokes the autoloadable ZSH function in the given file
@@ -50,6 +55,52 @@ EXAMPLES
 
   # creates a fish function called `foo` around a bash function called `foo`, where foo is a function defined in the file ~/.bashfuncs, so the file must be sourced first.
   pisciform --interactive --bash --init-file ~/.bashfuncs foo
+```
+
+### Real-world example
+
+As I mentioned, part of my motiviation for creating this was that I was coming from ZSH and I had accumulated a lot of functions.
+
+I store all of my function definitions for `autoload` in a directory `$HOME/.zfunc`, with subdirs for things like functions that are specific to work or specific topics.
+
+In ZSH, I autoloaded these via my `.zshrc` as so:
+
+```zsh
+# ...snip
+
+# ZSH autoloads functions from an FPATH env var, but this var is derived from an array called
+# fpath.
+# If the .zfunc dir exists and is not already in the `fpath` array, add it as the first element.
+# Then call autoload on all the filenames in the directory
+# (those shell expansion parameters are ZSH specific and they pull just the file names from non-dirs in said directory)
+[[ ${fpath[(Ie)"$HOME/.zfunc"]} -gt ${#fpath} ]] || fpath=("$HOME/.zfunc" $fpath) && autoload ${fpath[1]}/*(:t)
+
+# I have separate similar lines for the subdirectories.
+
+# ...snip
+```
+
+In migrating to `fish`, I'm now able to reuse these existing function definitions to hold me over by using `pisciform` in my
+fish configs. I'm using fish's [configuration snippets](https://fishshell.com/docs/3.3/index.html#configuration-files) feature, so I have
+a `04-pisciform.fish` file in my `~/.config/fish/conf.d` directory that looks like this:
+
+```fish
+function __wrap_zsh_autoload
+    set -f funcdir $argv[1]
+    set -f args --zsh --autoload
+    if status is-interactive
+        set -f -a args --interactive
+    end
+    for funcfile in $funcdir/*
+        if test -f "$funcfile"
+            pisciform $args "$funcfile"
+        else if test -d "$funcfile"
+            __wrap_zsh_autoload "$funcfile"
+        end
+    end
+end
+
+__wrap_zsh_autoload $HOME/.zfunc
 ```
 
 ## What Does Pisciform Do?
@@ -63,6 +114,7 @@ Then, when you subsequently call the `fish` version of the function, the followi
 3. The runner will source any init files that were passed to the wrapping call
 4. The runner will capture the existing environment variables and alias definitions for the subshell
 5. The runner will reset the directory stack so that only the changes from the function are captured.
+   1. This only applies to Bash and ZSH, since POSIX doesn't have a concept of a directory stack and doesn't have `pushd`/`popd` commands.
 6. The runner will call the wrapped function or built-in
 7. The runner will exit early with the command's status if the status is non-zero
 8. The runner will capture the environment variables, aliases, and directory stack state from after the command is executed
@@ -73,7 +125,8 @@ Then, when you subsequently call the `fish` version of the function, the followi
       2. Variables that are *not* exported will be set in the calling `fish` environment with `set -g`
    3. Aliases that exist after the script was run but did not exist before it was run will be created with `alias`
 10. The fish environment will `pushd` the reversed directory stack from the function execution; in other words, it will start from the bottom so that it ends up with the same final stack order as the subshell had when the function call completed.
-    1. If the element on the bottom of the stack is the same as the directory the function was originally called from, it'll get skipped.
+    1. This only applies to Bash and ZSH, since POSIX doesn't have a concept of a directory stack and doesn't have `pushd`/`popd` commands.
+    2. If the element on the bottom of the stack is the same as the directory the function was originally called from, it'll get skipped.
 11. If the final directory from the directory stack following is not the same as the final value of the `PWD` environment variable, we'll `cd` in to the value that's in the ending version of `PWD`
 
 These values are all captured in a temporary directory created using `mktemp -d`. The wrapper function will clean up the `tmpdir` after execution.
@@ -95,8 +148,24 @@ Pisciform is heavily inspired by `bass` and `replay`, with the same basic philos
 
 Right now, ZSH is the primary target; it's where I was coming from, and a lot of care was taken to be able to load functions defined as bare bodies in files, the same way one would do with autoload in ZSH. Bash and SH support shouldn't take much longer to do, as most stuff should be pretty similar.
 
-### Supported "Foreign" Shells
+### Implemented Features
 
-- [x] zsh
-- [x] bash
-- [ ] POSIX sh
+- [x] Execute function calls defined in a ZSH-compatible way
+  - [x] Support ZSH autoload function files
+- [x] Execute function calls defined in a BASH-compatible way
+- [x] Support `interactive` subshells
+- [x] Support `login` subshells
+- [x] Provide a list of files to be `source`'d before calling the function
+- [x] Support shell built-ins as well as functions for implemented shells
+- [x] Support replaying environment variable add/delete/modification for supported shells
+- [x] Support aliases added in supported shells
+- [x] Support directory changes in supported shells
+- [x] Support replaying changes to the directory stack in supported shells
+
+### Planned Features
+- [ ] Execute function calls in POSIX `/bin/sh`
+- [ ] Immediate execution of commands instead of generating function calls
+  - [ ] Immediately invoke a function as a one-off, replaying changes but not creating a Fish function
+  - [ ] Support a `source` mode that sources a file instead of trying to execute a command (different from existing init file support)
+- [ ] Investigate "shell daemons" to avoid forking overhead
+  - [ ] Would need to be able to "reset" shell environments in between command invocations

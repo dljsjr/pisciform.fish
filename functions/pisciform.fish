@@ -178,13 +178,19 @@ function pisciform --description "Create a fish function/alias for invoking a Ba
         end
     end
 
-    function _pisciform_usage
+    function _pisciform_short_usage
         echo "
 NAME:
   pisciform - Create a fish function/alias for invoking a Bash/ZSH/Posix shell function and capturing environment changes
 
 USAGE:
   pisciform [-h|--help] [-v|--verbose] [--interactive] [--login] [{-f|--file}|{-b|--builtin}] [--sh|--zsh|--bash] [--source ...] FUNCTION_NAME
+"
+    end
+
+    function _pisciform_usage
+        _pisciform_short_usage
+        echo "
 
 OPTIONS:
   -h, --help                print this usage, then return
@@ -203,13 +209,16 @@ OPTIONS:
 EXAMPLES
   # creates a fish function called `do_something` that invokes the autoloadable ZSH function in the given file
   pisciform --interactive --zsh --file \"$HOME/.zfunc/do_something\"
+
+  # creates a fish function called `foo` around a bash function called `foo`, where foo is a function defined in the file ~/.bashfuncs, so the file must be sourced first.
+  pisciform --interactive --bash --init-file ~/.bashfuncs foo
 "
     end
     #--- END: Private Functions
 
     argparse -x autoload,builtin -x zsh,bash,sh --name=pisciform h/help v/verbose interactive login a/autoload b/builtin zsh bash sh init-file=+ -- $argv
     or begin
-        _pisciform_usage
+        _pisciform_short_usage
         return 1
     end
 
@@ -219,7 +228,7 @@ EXAMPLES
     end
 
     if [ (count $argv) -ne 1 ]
-        _pisciform_usage
+        _pisciform_short_usage
         return 1
     end
 
