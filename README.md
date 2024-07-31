@@ -143,9 +143,7 @@ Pisciform is heavily inspired by `bass` and `replay`, with the same basic philos
 3. `pisciform` will also mirror changes to the directory stack, not just the PWD.
 4. `pisciform` works with interactive commands
 5. `pisciform` can be told that a function should be run in an interactive and/or login subshell, allowing it to utilize the profile and shellrc files in place for the subshell, which can be helpful when initially migrating to `fish`.
-6. Both `bass` and `replay` only support `bash` as the target for running non-fish shell commands. `pisciform` supports POSIX* and ZSH dialects as well.
-
-\*: Not yet, but soon.
+6. Both `bass` and `replay` only support `bash` as the target for running non-fish shell commands. `pisciform` supports POSIX and ZSH dialects as well.
 
 ## Progress
 
