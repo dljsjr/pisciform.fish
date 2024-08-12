@@ -68,7 +68,7 @@ funcstatus=$?
 while IFS= read -r envvar; do
   decl="$(declare -p "$envvar" 2>/dev/null)"
   if [ -n "$decl" ]; then
-    echo "$decl" >>"${outdir}/before/${envvar}"
+    echo "$decl" >>"${outdir}/after/${envvar}"
   fi
 done < <(awk 'BEGIN{for(v in ENVIRON) print v}' | sort -h)
 
